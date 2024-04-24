@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -40,12 +41,62 @@ void *port_scan(void *arg) {
             // Port is closed
             // printf("Port %d is closed\n", port);
         } else {
-            // Port is open
             printf("Port %d is open\n", port);
+            // Try to identify the service and retrieve version information
+            char buffer[1024];
+            ssize_t bytes_read = read(sockfd, buffer, sizeof(buffer));
+            if (bytes_read > 0) {
+                // Check if the response contains version information
+                printf("%s", buffer);
+                if (strstr(buffer, "HTTP/") != NULL) {
+                  // This is an HTTP response, extract more information
+                  char *status_start = strstr(buffer, "HTTP/");   //Find the
+                                                                  //start if the
+                                                                  //status line
+                  if (status_start != NULL) {
+                    // Extract the status code and reason phrase
+                    int status_code;
+                    char reason_phrase[1024];
+                    sscanf(status_start, "HTTP/%*s %d %1023[^\r\n]", &status_code, reason_phrase);
+                    printf("Status Code: %d\n", status_code);
+                    printf("Reason Phrase: %s\n", reason_phrase);
+                  }
+                  // Extract and print other headers if needed
+                  char *header_start = strstr(buffer, "\r\n");
+                  if(header_start != NULL) {
+                    header_start += 2;
+                    while(*header_start != '\r' && *(header_start + 1) != '\n') {
+                      char *header_end = strstr(header_start, ": ");
+                      if(header_end != NULL) {
+                        *header_end = '\0';
+                        printf("%s: ", header_start);
+                        header_end += 2;
+                        char *header_value_end = strstr(header_end, "\r\n");
+                        if(header_value_end != NULL) {
+                          *header_value_end = '\0';
+                          printf("%s\n", header_end);
+                          header_start = header_value_end + 2;
+                        } else {
+                          printf("ERROR: Header value not terminated properly\n");
+                          break;
+                        }
+                      } else {
+                        printf("ERROR: Malformed header\n");
+                        break;
+                      }
+                    }
+                  }
+                } else if (strstr(buffer, "SSH-") != NULL) {
+                    // This is an SSH service, extract version information
+                    // Example: SSH-2.0-OpenSSH_7.6p1 Ubuntu-4ubuntu0.3
+                    // Extract version from the response
+                    // Print the version information
+                }
+                // Add more checks for other services as needed
+            }
             close(sockfd);
         }
     }
-
     return NULL;
 }
 
